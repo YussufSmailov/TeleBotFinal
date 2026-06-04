@@ -51,7 +51,7 @@ def build_scheduler(bot: Bot) -> AsyncIOScheduler:
     # Вс 11:00 — последнее напоминание
     s.add_job(remind_sunday,         "cron", day_of_week="sun", hour=11, minute=0,  kwargs={"bot": bot}, id="remind_sun")
     # Каждый день 18:00 — кураторам внести баллы
-    s.add_job(remind_curators_scores,"cron", hour=18, minute=0,                     kwargs={"bot": bot}, id="curator_scores")
+   # s.add_job(remind_curators_scores,"cron", hour=18, minute=0,                     kwargs={"bot": bot}, id="curator_scores")
     # Каждые 5 мин — практики кураторов
     s.add_job(remind_practices,      "interval", minutes=5,                          kwargs={"bot": bot}, id="remind_practices")
     # Каждые 5 мин — практики Томирис
