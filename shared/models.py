@@ -1,94 +1,93 @@
-from __future__ import annotations
+"""
+Модели таблиц Supabase.
+Таблицы создаются вручную в Supabase, здесь только описание для чтения/записи.
+"""
 
-from datetime import datetime
-from enum import Enum as PyEnum
-from typing import List, Optional
+from datetime import date, datetime
+from typing import Optional
 
 from sqlalchemy import (
-    BigInteger, Boolean, DateTime, Enum,
-    ForeignKey, Integer, String, func,
+    BigInteger, Date, DateTime, Integer, String, Text,
+    UniqueConstraint, func,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class Base(DeclarativeBase):
     pass
 
 
-class PracticeType(str, PyEnum):
-    tomiris = "tomiris"
-    curator = "curator"
-
-
 class Student(Base):
+    """Ученик бота. Привязан только к потоку."""
     __tablename__ = "students"
 
     telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    full_name: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
-    stream_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    group_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    username: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    full_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    stream_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     registered_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    def __repr__(self) -> str:
-        return f"<Student tg={self.telegram_id} group={self.group_name}>"
-
-
-class Curator(Base):
-    __tablename__ = "curators"
-
-    telegram_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    full_name: Mapped[Optional[str]] = mapped_column(String(150), nullable=True)
-
-    curator_groups: Mapped[List["CuratorGroup"]] = relationship(
-        "CuratorGroup", back_populates="curator", cascade="all, delete-orphan"
-    )
-    practices: Mapped[List["Practice"]] = relationship(
-        "Practice", back_populates="curator"
+        DateTime(timezone=True), server_default=func.now()
     )
 
 
-class CuratorGroup(Base):
-    __tablename__ = "curator_groups"
+class StreamWeek(Base):
+    """Неделя потока с готовыми датами."""
+    __tablename__ = "stream_weeks"
+    __table_args__ = (UniqueConstraint("stream_name", "week_number"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    curator_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("curators.telegram_id", ondelete="CASCADE"), nullable=False
-    )
-    group_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    stream_name: Mapped[str] = mapped_column(String(100), nullable=False)
-
-    curator: Mapped["Curator"] = relationship("Curator", back_populates="curator_groups")
+    stream_name: Mapped[str] = mapped_column(String)
+    week_number: Mapped[int] = mapped_column(Integer)
+    week_date: Mapped[date] = mapped_column(Date)
+    announce_date: Mapped[date] = mapped_column(Date)
+    deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
-class Practice(Base):
-    __tablename__ = "practices"
+class CalendarEvent(Base):
+    """Событие недели: 'interactive' или 'test'."""
+    __tablename__ = "calendar_events"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    group_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    stream_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    curator_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("curators.telegram_id", ondelete="CASCADE"), nullable=False
-    )
-    practice_type: Mapped[PracticeType] = mapped_column(
-        Enum(PracticeType, name="practice_type_enum"), nullable=False
-    )
-    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
+    stream_name: Mapped[str] = mapped_column(String)
+    week_number: Mapped[int] = mapped_column(Integer)
+    event_type: Mapped[str] = mapped_column(String)
+    title: Mapped[str] = mapped_column(String)
 
-    curator: Mapped["Curator"] = relationship("Curator", back_populates="practices")
+
+class Lesson(Base):
+    """Урок курса. Номер недели общий для всех потоков."""
+    __tablename__ = "lessons"
+
+    lesson_number: Mapped[int] = mapped_column(Integer, primary_key=True)
+    week_number: Mapped[int] = mapped_column(Integer)
+    title: Mapped[str] = mapped_column(String)
+
+
+class Quote(Base):
+    """Цитата. week_number = NULL значит подходит любой неделе."""
+    __tablename__ = "quotes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    week_number: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    author: Mapped[str] = mapped_column(String)
+    text: Mapped[str] = mapped_column(Text)
+
+
+class TomirisPractice(Base):
+    """Практика с Томирис для потока."""
+    __tablename__ = "tomiris_practices"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    stream_name: Mapped[str] = mapped_column(String)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class TomirisReminderSent(Base):
+    """Какие напоминания о практике Томирис уже отправлены."""
     __tablename__ = "tomiris_reminders_sent"
+    __table_args__ = (UniqueConstraint("stream_name", "scheduled_at", "label"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    stream_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    label: Mapped[str] = mapped_column(String(20), nullable=False)
+    stream_name: Mapped[str] = mapped_column(String)
+    scheduled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    label: Mapped[str] = mapped_column(String)
