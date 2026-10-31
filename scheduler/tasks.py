@@ -44,6 +44,24 @@ async def get_stream_students(session, stream_name: str) -> list[int]:
     return [row[0] for row in result.all()]
 
 
+async def get_practice_students(session, practice: TomirisPractice) -> list[int]:
+    """
+    telegram_id учеников, которым нужна эта практика.
+    group_names пустое (NULL) — весь поток, включая тех, кто группу не выбрал.
+    Иначе — только ученики потока из перечисленных групп.
+    """
+    if not practice.group_names:
+        return await get_stream_students(session, practice.stream_name)
+
+    result = await session.execute(
+        select(Student.telegram_id).where(
+            Student.stream_name == practice.stream_name,
+            Student.group_name.in_(practice.group_names),
+        )
+    )
+    return [row[0] for row in result.all()]
+
+
 async def broadcast(bot: Bot, tg_ids: list[int], text: str) -> None:
     """Шлём текст каждому ученику, ошибки по одному не ломают рассылку."""
     for tg_id in tg_ids:
@@ -310,7 +328,12 @@ async def remind_tomiris_practices(bot: Bot) -> None:
                     f"🗓 <b>{dt:%d.%m.%Y в %H:%M}</b>\n\n"
                     f"Готовься! 💪"
                 )
-                await send_to_stream(bot, session, practice.stream_name, text)
+                ids = await get_practice_students(session, practice)
+                await broadcast(bot, ids, text)
+                logger.info(
+                    f"Томирис ({label}): отправлено {len(ids)} ученикам потока "
+                    f"«{practice.stream_name}», группы: {practice.group_names or 'все'}"
+                )
 
                 # Сразу записываем, чтобы не отправить повторно
                 session.add(TomirisReminderSent(
